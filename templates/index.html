@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NetShield IDS</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#eceff3; --surface:#ffffff; --ink:#16233b; --muted:#5d6b82; --line:#d5dbe4;
+    --accent:#1d6f8c; --critical:#b3261e; --high:#d9622b; --medium:#c99a14; --low:#4b8b5a;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#10161f; --surface:#18212d; --ink:#e6ebf2; --muted:#93a1b6; --line:#2a3646; --accent:#4cb3d4; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:'Manrope','Segoe UI',system-ui,sans-serif;line-height:1.5}
+  header{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between;padding:20px 28px;border-bottom:1px solid var(--line);background:var(--surface)}
+  h1{margin:0;font-size:1.5rem;font-weight:800;letter-spacing:-.02em}
+  h1 small{display:block;font-size:.85rem;font-weight:400;color:var(--muted);letter-spacing:0}
+  .status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.9rem}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--low)}
+  .dot.off{background:var(--critical)}
+  main{max-width:1280px;margin:0 auto;padding:24px 28px 48px}
+  .strip{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--line);border-radius:6px}
+  .strip div{padding:18px 22px;border-right:1px solid var(--line)}
+  .strip div:last-child{border-right:0}
+  .strip b{display:block;font-size:2rem;font-weight:800;line-height:1.1}
+  .strip span{color:var(--muted);font-size:.9rem}
+  .strip .alertnum b{color:var(--critical)}
+  .tools{margin:20px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .tools p{margin:0 8px 0 0;color:var(--muted);font-size:.9rem}
+  button{font:inherit;font-size:.88rem;font-weight:600;padding:8px 14px;border-radius:4px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.danger{color:var(--critical)}
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px}
+  section{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:18px 20px;min-width:0}
+  h2{margin:0 0 12px;font-size:1.05rem;font-weight:800}
+  .scroll{overflow-x:auto;max-height:420px;overflow-y:auto}
+  table{width:100%;border-collapse:collapse;font-size:.9rem}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
+  td.detail{white-space:normal;color:var(--muted)}
+  .sev{font-weight:800}
+  .Critical{color:var(--critical)} .High{color:var(--high)} .Medium{color:var(--medium)} .Low{color:var(--low)}
+  .empty{color:var(--muted);padding:24px 0;text-align:center}
+  .charts{display:grid;gap:20px}
+  canvas{max-height:210px}
+  ol{margin:0;padding-left:20px} li{padding:3px 0} li span{color:var(--muted);float:right}
+  .wide{grid-column:1 / -1}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}.strip{grid-template-columns:repeat(2,1fr)}.strip div:nth-child(2){border-right:0}.strip div:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>NetShield IDS<small>Network intrusion detection using Python</small></h1>
+  <div class="status"><span class="dot" id="dot"></span><span id="status">Connecting…</span></div>
+</header>
+
+<main>
+  <div class="strip">
+    <div><b id="packets">0</b><span>Packets analysed</span></div>
+    <div class="alertnum"><b id="alertcount">0</b><span>Alerts raised</span></div>
+    <div><b id="attackers">0</b><span>Unique attackers</span></div>
+    <div><b id="uptime">0s</b><span>Running time</span></div>
+  </div>
+
+  <div class="tools">
+    <p>Demo attacks:</p>
+    <button onclick="sim('portscan')">Port scan</button>
+    <button onclick="sim('synflood')">SYN flood</button>
+    <button onclick="sim('icmp')">ICMP flood</button>
+    <button onclick="sim('blacklist')">Blacklisted IP</button>
+    <button onclick="sim('badport')">Suspicious port</button>
+    <button class="danger" onclick="resetAll()">Clear all data</button>
+  </div>
+
+  <div class="grid">
+    <section>
+      <h2>Detected alerts</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Time</th><th>Attack type</th><th>Source IP</th><th>Severity</th><th>Details</th></tr></thead>
+          <tbody id="alerts"></tbody>
+        </table>
+        <div class="empty" id="empty">No alerts yet. Browse normally, run a scan, or use a demo attack above.</div>
+      </div>
+    </section>
+
+    <div class="charts">
+      <section><h2>Alerts by type</h2><canvas id="typeChart"></canvas></section>
+      <section><h2>Protocols</h2><canvas id="protoChart"></canvas></section>
+    </div>
+
+    <section class="wide"><h2>Packets per second (last 60 s)</h2><canvas id="lineChart"></canvas></section>
+    <section><h2>Top 5 source IPs</h2><ol id="top"></ol></section>
+  </div>
+</main>
+
+<script>
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const palette = () => [css('--accent'), css('--high'), css('--medium'), css('--low'), css('--critical')];
+
+const mk = (id, type, opts={}) => new Chart(document.getElementById(id), {
+  type, data:{labels:[],datasets:[{data:[],backgroundColor:palette(),borderColor:css('--accent'),borderWidth:type==='line'?2:0,tension:.3,pointRadius:0,fill:false}]},
+  options:Object.assign({responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'right'}}},opts)
+});
+const typeChart = mk('typeChart','bar',{scales:{y:{beginAtZero:true,ticks:{precision:0}}}});
+const protoChart = mk('protoChart','doughnut');
+const lineChart = mk('lineChart','line',{scales:{y:{beginAtZero:true},x:{ticks:{maxTicksLimit:8}}}});
+document.querySelectorAll('canvas').forEach(c=>c.parentElement.style.minHeight='260px');
+
+function setChart(ch, labels, values){
+  ch.data.labels = labels; ch.data.datasets[0].data = values; ch.update();
+}
+function fmt(s){ return s<60 ? s+'s' : Math.floor(s/60)+'m '+(s%60)+'s'; }
+
+function cell(tr, text, cls){
+  const td = document.createElement('td'); td.textContent = text;
+  if(cls) td.className = cls; tr.appendChild(td); return td;
+}
+
+async function refresh(){
+  try{
+    const d = await (await fetch('/api/data')).json();
+    document.getElementById('dot').classList.remove('off');
+    document.getElementById('status').textContent = 'Monitoring live';
+    document.getElementById('packets').textContent = d.total_packets.toLocaleString();
+    document.getElementById('alertcount').textContent = d.total_alerts;
+    document.getElementById('attackers').textContent = d.unique_attackers;
+    document.getElementById('uptime').textContent = fmt(d.uptime);
+
+    const tb = document.getElementById('alerts'); tb.innerHTML = '';
+    d.alerts.forEach(a=>{
+      const tr = document.createElement('tr');
+      cell(tr,a.time); cell(tr,a.type); cell(tr,a.source);
+      cell(tr,a.severity,'sev '+a.severity); cell(tr,a.detail,'detail');
+      tb.appendChild(tr);
+    });
+    document.getElementById('empty').style.display = d.alerts.length ? 'none' : 'block';
+
+    setChart(typeChart, Object.keys(d.alerts_by_type), Object.values(d.alerts_by_type));
+    setChart(protoChart, Object.keys(d.protocols), Object.values(d.protocols));
+    setChart(lineChart, d.timeline.labels, d.timeline.values);
+
+    const top = document.getElementById('top'); top.innerHTML = '';
+    d.top_sources.forEach(([ip,n])=>{
+      const li = document.createElement('li'); li.textContent = ip;
+      const s = document.createElement('span'); s.textContent = n+' packets';
+      li.appendChild(s); top.appendChild(li);
+    });
+  }catch(e){
+    document.getElementById('dot').classList.add('off');
+    document.getElementById('status').textContent = 'Server not reachable';
+  }
+}
+async function sim(kind){ await fetch('/api/simulate/'+kind,{method:'POST'}); refresh(); }
+async function resetAll(){ await fetch('/api/reset',{method:'POST'}); refresh(); }
+
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>
