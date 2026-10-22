@@ -1,8 +1,14 @@
-"""NetShield IDS - Flask server. Run:  python app.py  (as Administrator)"""
+
+"""NetShield IDS - Flask server for online demo."""
+import os
 from flask import Flask, jsonify, render_template
 import detector
 
 app = Flask(__name__)
+
+# Disable real packet capture for the online demo by default.
+if os.environ.get("ENABLE_SNIFFER", "0") == "1":
+    detector.start_sniffer()
 
 
 @app.route("/")
@@ -28,6 +34,5 @@ def reset():
 
 
 if __name__ == "__main__":
-    detector.start_sniffer()
-    print("NetShield IDS running -> open http://localhost:5000")
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
